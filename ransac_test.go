@@ -22,15 +22,15 @@ func TestRansac(t *testing.T) {
 	loader := loader.CsvLoader{}
 	points, _ := loader.Load(filepath)
 
-	planeScore := MaxInt
 	var towerCandidate []r3.Vec
 	towerCandidate = points
-	for planeScore > 3000 {
-		planeRansac, _ := NewPlaneRansac(towerCandidate, 1000, 0.3)
+	for {
+		planeRansac, _ := NewPlaneRansac(towerCandidate, 1000, 0.5)
 		plane := planeRansac.Fitting()
-		//角度
+		if !plane.IsHorizontal() {
+			break
+		}
 		planep, tmpTower := planeRansac.PlanePoints(plane)
-		planeScore = len(planep)
 		towerCandidate = tmpTower
 		writePoints(outDir+strconv.Itoa(len(planep))+".csv", planep)
 	}

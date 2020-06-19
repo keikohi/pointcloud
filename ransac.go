@@ -87,15 +87,6 @@ func randomSampling(sampleNum int, population []r3.Vec) []r3.Vec {
 	return sample
 }
 
-type plane struct {
-	dir r3.Vec
-	p   r3.Vec
-}
-
-func (pl *plane) distance(p r3.Vec) float64 {
-	return math.Abs(pl.dir.Dot(p)-pl.dir.Dot(pl.p)) / r3.Norm(pl.dir)
-}
-
 type CircleRansac struct {
 	input     []r3.Vec
 	iteration int
