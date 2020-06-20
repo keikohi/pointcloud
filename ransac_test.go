@@ -2,6 +2,7 @@ package pointcloud
 
 import (
 	"fmt"
+	"math"
 	"os"
 	"strconv"
 	"testing"
@@ -54,38 +55,26 @@ func TestCalcCircle(t *testing.T) {
 
 func TestCircleFitting(t *testing.T) {
 
-	filepath := "D:\\dev\\pc\\tower\\only_tower\\tower_000000.csv"
+	filepath := "D:\\dev\\pc\\tower\\detected\\tower.csv"
 	loader := loader.CsvLoader{}
 	points, _ := loader.Load(filepath)
 
-	// planeRansac, _ := NewPlaneRansac(points, 3000, 0.003)
-	// plane := planeRansac.Fitting()
-
-	// _, otherp := planeRansac.PlanePoints(plane)
-	// otherWriter := writer.NewCsvWriter("D:\\dev\\pc\\tower\\only_tower\\noGround.csv", otherp)
-	// otherWriter.Write()
-
 	zmin, zmax := zMinMax(points)
-	const Interval float64 = 0.5
+	const Interval float64 = 0.05
 	sections, zlist := sectionalPoints(points, Interval, zmin.Z, zmax.Z)
 	dir := "D:\\dev\\pc\\tower\\only_tower\\detected\\"
+	centers := make([]r3.Vec, 0, len(zlist))
 	for i, section := range sections {
 		if len(section) < 10 {
 			continue
 		}
-		circleRansac, _ := NewCircleRansac(section, 2000, 0.01)
-		circle := circleRansac.Fitting()
-		if circle.Radius > 20 {
-			continue
-		}
-		pf := PrimitiveFactory{}
-		crcl := pf.Circle(circle, zlist[i], 500)
-		fmt.Fprintf(os.Stderr, "%+v \n", circle)
-		path := dir + "circlep" + strconv.Itoa(i) + ".csv"
-		writePoints(path, crcl)
-		// writer := writer.NewCsvWriter(path, circlep)
-		// writer.Write()
+		eps := 0.05
+		cr, _ := NewCircleRansac(section, 500, eps)
+		circle := cr.Fitting()
+		centers = append(centers, r3.Vec{X: circle.Center.X, Y: circle.Center.Y, Z: zlist[i]})
+
 	}
+	writePoints(dir+"cneters.csv", centers)
 
 	// dir := "D:\\dev\\pc\\tower\\only_tower\\"
 
@@ -101,6 +90,25 @@ func TestCircleFitting(t *testing.T) {
 	// path := dir + "circleRansacResult" + ".csv"
 	// writePoints(path, circlep)
 
+}
+
+func TestLineRansac(t *testing.T) {
+	filepath := "D:\\dev\\pc\\tower\\only_tower\\detected\\cneters.csv"
+	loader := loader.CsvLoader{}
+	points, _ := loader.Load(filepath)
+	zmin, zmax := zMinMax(points)
+	dir := "D:\\dev\\pc\\tower\\only_tower\\detected\\"
+	lr, _ := NewLineRansac(points, 1000, 0.08)
+	line := lr.Fitting()
+	pf := PrimitiveFactory{}
+	linep := pf.Line(line, zmin.Z, zmax.Z, 300)
+	writePoints(dir+"linep.csv", linep)
+
+	groundline := Line{udir: r3.Vec{X: 0, Y: 0, Z: 1}, p: line.p}
+	verticalLine := pf.Line(groundline, zmin.Z, zmax.Z, 300)
+	writePoints(dir+"verticalLine.csv", verticalLine)
+	radius := angle(groundline.udir, line.udir)
+	fmt.Println("tilt angle :", radius*180.0/math.Pi)
 }
 
 func writePoints(path string, points []r3.Vec) {

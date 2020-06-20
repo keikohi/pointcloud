@@ -13,6 +13,7 @@ import (
 )
 
 const EPS float64 = 1.0e-8
+const LargeRadius = 25.0
 
 type PlaneRancac struct {
 	input     []r3.Vec
@@ -30,14 +31,14 @@ func NewPlaneRansac(input []r3.Vec, iteration int, eps float64) (*PlaneRancac, e
 	return &PlaneRancac{input: input, iteration: iteration, eps: eps}, nil
 }
 
-func (pr *PlaneRancac) Fitting() plane {
+func (pr *PlaneRancac) Fitting() Plane {
 	maxScore := 0
-	var maxPlane plane
+	var maxPlane Plane
 	for i := 0; i < pr.iteration; i++ {
 		planePoints := randomSampling(3, pr.input)
 		v1 := planePoints[1].Sub(planePoints[0])
 		v2 := planePoints[2].Sub(planePoints[0])
-		plane := plane{dir: v1.Cross(v2), p: planePoints[0]}
+		plane := Plane{dir: v1.Cross(v2), p: planePoints[0]}
 		score := pr.count(plane)
 		if score > maxScore {
 			maxPlane = plane
@@ -48,7 +49,7 @@ func (pr *PlaneRancac) Fitting() plane {
 	return maxPlane
 }
 
-func (pr *PlaneRancac) PlanePoints(plane plane) ([]r3.Vec, []r3.Vec) {
+func (pr *PlaneRancac) PlanePoints(plane Plane) ([]r3.Vec, []r3.Vec) {
 	planep := make([]r3.Vec, 0, 10000)
 	otherp := make([]r3.Vec, 0, 100000)
 	// udir := r3.Unit(plane.dir)
@@ -67,7 +68,7 @@ func (pr *PlaneRancac) PlanePoints(plane plane) ([]r3.Vec, []r3.Vec) {
 	return planep, otherp
 }
 
-func (pr *PlaneRancac) count(pl plane) int {
+func (pr *PlaneRancac) count(pl Plane) int {
 	score := 0
 	for _, p := range pr.input {
 		if pl.distance(p) <= pr.eps {
@@ -158,8 +159,12 @@ func (cr *CircleRansac) calcCircle(pnts [3]r2.Vec) (Circle, bool) {
 	cx := (b1*c2 - b2*c1) / D
 	cy := (c1*a2 - c2*a1) / D
 	cp := r2.Vec{X: cx, Y: cy}
+	radius := r2.Norm(cp.Sub(v1))
+	if radius > LargeRadius {
+		return Circle{}, false
+	}
 
-	return Circle{Center: cp, Radius: r2.Norm(cp.Sub(v1))}, true
+	return Circle{Center: cp, Radius: radius}, true
 }
 
 func (cr *CircleRansac) count(circle Circle) int {
@@ -170,4 +175,52 @@ func (cr *CircleRansac) count(circle Circle) int {
 		}
 	}
 	return score
+}
+
+type LineRansac struct {
+	input     []r3.Vec
+	iteration int
+	eps       float64
+}
+
+func NewLineRansac(input []r3.Vec, iteration int, eps float64) (*LineRansac, error) {
+	if len(input) < 2 {
+		return nil, errors.New("input points should be more than 2")
+	}
+	if eps <= 0 {
+		return nil, errors.New("iteration should be more than 0")
+	}
+	return &LineRansac{input: input, iteration: iteration, eps: eps}, nil
+}
+
+func (lr *LineRansac) calcLine(points [2]r3.Vec) Line {
+	p := points[0]
+	dir := r3.Unit(points[0].Sub(points[1]))
+	return Line{udir: dir, p: p}
+}
+
+func (lr *LineRansac) count(line Line) int {
+	score := 0
+	for _, p := range lr.input {
+		if line.distance(p) <= lr.eps {
+			score++
+		}
+	}
+	return score
+}
+
+func (lr *LineRansac) Fitting() Line {
+	maxScore := 0
+	var bestLine Line
+	for i := 0; i < lr.iteration; i++ {
+		points := randomSampling(2, lr.input)
+		line := lr.calcLine([2]r3.Vec{points[0], points[1]})
+		score := lr.count(line)
+		if score > maxScore {
+			maxScore = score
+			bestLine = line
+			fmt.Fprintf(os.Stderr, "%d: max Num:%d, line: %+v \n", i, score, bestLine)
+		}
+	}
+	return bestLine
 }
