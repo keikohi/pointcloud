@@ -6,6 +6,7 @@ import (
 	"os"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/keikohi/pointcloud/loader"
 	"github.com/keikohi/pointcloud/writer"
@@ -101,7 +102,7 @@ func TestLineRansac(t *testing.T) {
 	points, _ := loader.Load(filepath)
 	zmin, zmax := zMinMax(points)
 	dir := "D:\\dev\\pc\\tower\\only_tower\\detected\\"
-	lr, _ := NewLineRansac(points, 1000, 0.08)
+	lr, _ := NewLineRansac(points, 3000, 0.08)
 	line := lr.Fitting()
 	pf := PrimitiveFactory{}
 	linep := pf.Line(line, zmin.Z, zmax.Z, 300)
@@ -120,8 +121,11 @@ func TestTransformZ(t *testing.T) {
 	loader := loader.CsvLoader{}
 	points, _ := loader.Load(filepath)
 
-	planeRansac, _ := NewPlaneRansac(points, 3000, 0.3)
+	var s time.Time
+	s = time.Now()
+	planeRansac, _ := NewPlaneRansac(points, 1500, 0.5)
 	plane := planeRansac.Fitting()
+	fmt.Printf("plane fitting : %v Seconds\n", (time.Now().Sub(s)).Seconds())
 	planep, tower := planeRansac.PlanePoints(plane)
 
 	writePoints(outDir+"plane.csv", planep)
@@ -153,7 +157,11 @@ func TestTransformZ(t *testing.T) {
 	linep := pf.Line(line, zmin.Z, zmax.Z, PRIMITIVE_POINTS)
 	writePoints(outDir+"linep.csv", linep)
 
-	Translate(line, tower)
+	matrix, ok := NewLineMatrix(line)
+	if !ok {
+		return
+	}
+	matrix.Translate(tower)
 	writePoints(outDir+"transformedTower.csv", tower)
 
 	// groundline := Line{udir: r3.Vec{X: 0, Y: 0, Z: 1}, p: line.p}

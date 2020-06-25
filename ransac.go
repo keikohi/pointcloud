@@ -5,6 +5,7 @@ import (
 	"math"
 	"math/rand"
 	"os"
+	"sync"
 	"time"
 
 	"golang.org/x/exp/errors/fmt"
@@ -14,11 +15,15 @@ import (
 
 const EPS float64 = 1.0e-8
 const LargeRadius = 25.0
+const PARARLLEL = 10
 
 type PlaneRancac struct {
 	input     []r3.Vec
 	iteration int
 	eps       float64
+	bestPlane Plane
+	bestScore int
+	mu        *sync.RWMutex
 }
 
 func NewPlaneRansac(input []r3.Vec, iteration int, eps float64) (*PlaneRancac, error) {
@@ -28,25 +33,50 @@ func NewPlaneRansac(input []r3.Vec, iteration int, eps float64) (*PlaneRancac, e
 	if eps <= 0 {
 		return nil, errors.New("iteration should be more than 0")
 	}
-	return &PlaneRancac{input: input, iteration: iteration, eps: eps}, nil
+	return &PlaneRancac{input: input, iteration: iteration, eps: eps, bestScore: 0, bestPlane: Plane{}, mu: &sync.RWMutex{}}, nil
 }
 
 func (pr *PlaneRancac) Fitting() Plane {
-	maxScore := 0
-	var maxPlane Plane
-	for i := 0; i < pr.iteration; i++ {
-		planePoints := randomSampling(3, pr.input)
-		v1 := planePoints[1].Sub(planePoints[0])
-		v2 := planePoints[2].Sub(planePoints[0])
-		plane := Plane{dir: v1.Cross(v2), p: planePoints[0]}
-		score := pr.count(plane)
-		if score > maxScore {
-			maxPlane = plane
-			maxScore = score
-			fmt.Fprintf(os.Stderr, "%d: max Num:%d, plane: %+v \n", i, score, maxPlane)
-		}
+	// maxScore := 0
+	// var maxPlane Plane
+	// for i := 0; i < pr.iteration; i++ {
+	// 	planePoints := randomSampling(3, pr.input)
+	// 	v1 := planePoints[1].Sub(planePoints[0])
+	// 	v2 := planePoints[2].Sub(planePoints[0])
+	// 	plane := Plane{dir: v1.Cross(v2), p: planePoints[0]}
+	// 	score := pr.count(plane)
+	// 	if score > maxScore {
+	// 		maxPlane = plane
+	// 		maxScore = score
+	// 		fmt.Fprintf(os.Stderr, "%d: max Num:%d, plane: %+v \n", i, score, maxPlane)
+	// 	}
+	// }
+	// return maxPlane
+	var wg sync.WaitGroup
+	for pi := 0; pi < PARARLLEL; pi++ {
+		wg.Add(1)
+		go func(pi int) {
+			for i := 0; i < pr.iteration/PARARLLEL; i++ {
+				planePoints := randomSampling(3, pr.input)
+				v1 := planePoints[1].Sub(planePoints[0])
+				v2 := planePoints[2].Sub(planePoints[0])
+				plane := Plane{dir: v1.Cross(v2), p: planePoints[0]}
+				score := pr.count(plane)
+				pr.mu.Lock()
+				if score > pr.bestScore {
+					pr.bestPlane = plane
+					pr.bestScore = score
+					fmt.Fprintf(os.Stderr, "%d, %d: max Num:%d, plane: %+v \n", pi, i, score, pr.bestPlane)
+				}
+				pr.mu.Unlock()
+			}
+			wg.Done()
+		}(pi)
 	}
-	return maxPlane
+	wg.Wait()
+	fmt.Println("fin-------------")
+	return pr.bestPlane
+
 }
 
 func (pr *PlaneRancac) PlanePoints(plane Plane) ([]r3.Vec, []r3.Vec) {
@@ -54,11 +84,6 @@ func (pr *PlaneRancac) PlanePoints(plane Plane) ([]r3.Vec, []r3.Vec) {
 	otherp := make([]r3.Vec, 0, 100000)
 	// udir := r3.Unit(plane.dir)
 	for _, p := range pr.input {
-		// v := p.Sub(plane.p)
-		// vdir := r3.Vec{X: v.X * udir.X, Y: v.Y * udir.Y, Z: v.Z * udir.Z}
-		// if r3.Norm(vdir) <= pr.eps {
-		// 	planep = append(planep, p)
-		// }
 		if plane.distance(p) <= pr.eps {
 			planep = append(planep, p)
 		} else {
